@@ -19,6 +19,6 @@ jobs:
     - name: Build
       run: cargo build --verbose
     - name: Lint
-      run: cargo clippy --verbose -- -D warnings
+      run: cargo clippy --verbose -- -Dwarnings
     - name: Audit
       uses: actions-rs/audit-check@v1.2.0
