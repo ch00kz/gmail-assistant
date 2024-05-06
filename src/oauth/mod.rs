@@ -36,10 +36,10 @@ struct OAuthUrlParams {
     prompt: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct OAuthRedirectCode(String);
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 struct RedirectUrlParams {
     code: OAuthRedirectCode,
 }
@@ -66,7 +66,7 @@ fn parse_redirect_url_params(redirect_url: Url) -> Option<RedirectUrlParams> {
     serde_urlencoded::from_str(query_str).ok()
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 pub struct OAuthAccessToken(String);
 
 impl fmt::Display for OAuthAccessToken {
@@ -75,9 +75,9 @@ impl fmt::Display for OAuthAccessToken {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
+#[allow(dead_code)]
 pub struct OAuthRefreshToken(String);
-
 #[derive(Serialize)]
 pub struct GetAccessTokenParams {
     grant_type: String,
@@ -87,7 +87,7 @@ pub struct GetAccessTokenParams {
     redirect_uri: Url,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 pub struct GetAccessTokenResponse {
     pub access_token: OAuthAccessToken,
     pub refresh_token: OAuthRefreshToken,
