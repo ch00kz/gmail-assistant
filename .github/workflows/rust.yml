@@ -2,23 +2,29 @@ name: Rust
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Build
-      run: cargo build --verbose
-    - name: Lint
-      run: cargo clippy --verbose -- -Dwarnings
-    - name: Audit
-      uses: actions-rs/audit-check@v1.2.0
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        name: Set up Rust toolchain
+
+      - name: Build
+        run: cargo build --verbose
+
+      - name: Lint
+        run: cargo clippy --verbose -- -Dwarnings
+
+      - uses: rustsec/audit-check@v1.4.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
