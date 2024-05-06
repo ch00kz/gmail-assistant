@@ -1,5 +1,6 @@
 use core::fmt;
 
+use crate::db::insert_access_token;
 use crate::settings::get_settings;
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -14,7 +15,9 @@ pub async fn run() -> GetAccessTokenResponse {
     std::io::stdin().read_line(&mut redirect_url_str).unwrap();
     let redirect_url = Url::parse(redirect_url_str.trim()).unwrap();
     let redirect_params = parse_redirect_url_params(redirect_url).unwrap();
-    get_access_token(redirect_params.code).await
+    let response = get_access_token(redirect_params.code).await;
+    insert_access_token(&response).unwrap();
+    response
 }
 
 // Google OAuth Settings
@@ -67,7 +70,7 @@ fn parse_redirect_url_params(redirect_url: Url) -> Option<RedirectUrlParams> {
 }
 
 #[derive(Deserialize)]
-pub struct OAuthAccessToken(String);
+pub struct OAuthAccessToken(pub String);
 
 impl fmt::Display for OAuthAccessToken {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -76,8 +79,13 @@ impl fmt::Display for OAuthAccessToken {
 }
 
 #[derive(Deserialize)]
-#[allow(dead_code)]
 pub struct OAuthRefreshToken(String);
+
+impl fmt::Display for OAuthRefreshToken {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 #[derive(Serialize)]
 pub struct GetAccessTokenParams {
     grant_type: String,
