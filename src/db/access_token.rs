@@ -73,6 +73,6 @@ impl AccessToken {
                 })
             })
             .ok()?;
-        results.next().unwrap().ok()
+        results.next().map_or(None, |f| f.ok())
     }
 }
