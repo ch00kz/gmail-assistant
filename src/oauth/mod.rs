@@ -1,11 +1,41 @@
-use core::fmt;
-
-use crate::db::insert_access_token;
+use crate::db;
 use crate::settings::get_settings;
-use serde::{Deserialize, Serialize};
+use chrono::Utc;
+use rusqlite::Connection;
 use url::Url;
 
-pub async fn run() -> GetAccessTokenResponse {
+pub mod types;
+pub use self::types::*;
+
+pub async fn run(conn: &Connection) -> OAuthAccessToken {
+    match db::access_token::AccessToken::get_latest(conn) {
+        Some(record) => {
+            let now = Utc::now();
+            if record.expires_at > now {
+                record.access_token
+            } else {
+                let res = crate::oauth::refresh_access_token(&record.refresh_token).await;
+                record
+                    .update_access_token(conn, &res.access_token, res.expires_in)
+                    .unwrap();
+                res.access_token
+            }
+        }
+        None => {
+            let res = user_flow().await;
+            db::access_token::AccessToken::insert(
+                conn,
+                &res.access_token,
+                &res.refresh_token,
+                res.expires_in,
+            )
+            .unwrap();
+            res.access_token
+        }
+    }
+}
+
+pub async fn user_flow() -> GetAccessTokenResponse {
     let oauth_url = build_oauth_url().expect("Unable to build OAuth URL");
 
     println!("{oauth_url}");
@@ -15,36 +45,7 @@ pub async fn run() -> GetAccessTokenResponse {
     std::io::stdin().read_line(&mut redirect_url_str).unwrap();
     let redirect_url = Url::parse(redirect_url_str.trim()).unwrap();
     let redirect_params = parse_redirect_url_params(redirect_url).unwrap();
-    let response = get_access_token(redirect_params.code).await;
-    insert_access_token(&response).unwrap();
-    response
-}
-
-// Google OAuth Settings
-#[derive(Serialize, Deserialize)]
-pub struct OAuthClientId(String);
-
-#[derive(Serialize, Deserialize)]
-pub struct OAuthClientSecret(String);
-
-#[derive(Serialize)]
-struct OAuthUrlParams {
-    response_type: String,
-    client_id: OAuthClientId,
-    redirect_uri: Url,
-    scope: String,
-    access_type: String,
-    include_granted_scopes: String,
-    state: String,
-    prompt: String,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct OAuthRedirectCode(String);
-
-#[derive(Deserialize)]
-struct RedirectUrlParams {
-    code: OAuthRedirectCode,
+    get_access_token(redirect_params.code).await
 }
 
 fn build_oauth_url() -> Option<Url> {
@@ -69,41 +70,6 @@ fn parse_redirect_url_params(redirect_url: Url) -> Option<RedirectUrlParams> {
     serde_urlencoded::from_str(query_str).ok()
 }
 
-#[derive(Deserialize)]
-pub struct OAuthAccessToken(pub String);
-
-impl fmt::Display for OAuthAccessToken {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-#[derive(Deserialize)]
-pub struct OAuthRefreshToken(String);
-
-impl fmt::Display for OAuthRefreshToken {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-#[derive(Serialize)]
-pub struct GetAccessTokenParams {
-    grant_type: String,
-    client_id: OAuthClientId,
-    client_secret: OAuthClientSecret,
-    code: OAuthRedirectCode,
-    redirect_uri: Url,
-}
-
-#[derive(Deserialize)]
-pub struct GetAccessTokenResponse {
-    pub access_token: OAuthAccessToken,
-    pub refresh_token: OAuthRefreshToken,
-    pub token_type: String,
-    pub expires_in: u32,
-    pub scope: String,
-}
-
 pub async fn get_access_token(code: OAuthRedirectCode) -> GetAccessTokenResponse {
     let settings = get_settings();
     let body = GetAccessTokenParams {
@@ -112,6 +78,26 @@ pub async fn get_access_token(code: OAuthRedirectCode) -> GetAccessTokenResponse
         client_id: settings.google_oauth.client_id,
         client_secret: settings.google_oauth.client_secret,
         redirect_uri: settings.google_oauth.redirect_url,
+    };
+    let client = reqwest::Client::new();
+    client
+        .post("https://oauth2.googleapis.com/token")
+        .form(&body)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap()
+}
+
+pub async fn refresh_access_token(refresh_token: &OAuthRefreshToken) -> RefreshTokenResponse {
+    let settings = get_settings();
+    let body = RefreshTokenParams {
+        refresh_token: refresh_token.clone(),
+        grant_type: "refresh_token".to_string(),
+        client_id: settings.google_oauth.client_id,
+        client_secret: settings.google_oauth.client_secret,
     };
     let client = reqwest::Client::new();
     client

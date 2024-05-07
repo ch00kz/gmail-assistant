@@ -2,7 +2,6 @@ mod db;
 mod oauth;
 mod settings;
 
-use db::get_access_token;
 use oauth::OAuthAccessToken;
 use reqwest::Client;
 use serde::Deserialize;
@@ -10,39 +9,51 @@ use serde_json::Value;
 
 #[tokio::main]
 async fn main() {
-    let access_token = match get_access_token() {
-        Some(row) => OAuthAccessToken(row.access_token),
-        None => {
-            let token_response = oauth::run().await;
-            token_response.access_token
-        }
-    };
+    let conn = db::get_connection().unwrap();
+    db::setup_tables(&conn).unwrap();
 
-    let response = get_messages(access_token).await;
-    println!("{:?}", response)
+    let access_token = oauth::run(&conn).await;
+    let response = get_messages(&access_token).await;
+    let message = response.messages.get(3).unwrap();
+    let response = get_message(&access_token, &message.id).await;
+    println!("{:?}", response);
 }
 
 #[derive(Deserialize, Debug)]
-struct MessageId(String);
-
-#[derive(Deserialize, Debug)]
-struct ThreadId(String);
+struct MessageId(pub String);
 
 #[derive(Deserialize, Debug)]
 struct MessageSnippet {
     id: MessageId,
-    #[serde(rename = "threadId")]
-    thread_id: ThreadId,
+    // #[serde(rename = "threadId")]
+    // thread_id: ThreadId,
 }
 #[derive(Deserialize, Debug)]
 struct GetMessagesResponse {
     messages: Vec<MessageSnippet>,
 }
 
-async fn get_messages(access_token: OAuthAccessToken) -> GetMessagesResponse {
+async fn get_messages(access_token: &OAuthAccessToken) -> GetMessagesResponse {
     let client = Client::new();
     client
         .get("https://gmail.googleapis.com/gmail/v1/users/me/messages")
+        .bearer_auth(access_token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap()
+}
+
+async fn get_message(access_token: &OAuthAccessToken, message_id: &MessageId) -> Value {
+    let client = Client::new();
+    let url = format!(
+        "https://gmail.googleapis.com/gmail/v1/users/me/messages/{}",
+        message_id.0
+    );
+    client
+        .get(url)
         .bearer_auth(access_token)
         .send()
         .await
