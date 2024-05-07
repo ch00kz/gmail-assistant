@@ -1,5 +1,5 @@
 use chrono::{DateTime, Duration, Utc};
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 
 use crate::oauth::{OAuthAccessToken, OAuthRefreshToken};
 
@@ -59,20 +59,17 @@ impl AccessToken {
         Ok(())
     }
 
-    pub fn get_latest(conn: &Connection) -> Option<AccessToken> {
-        let mut stmt = conn
-            .prepare("SELECT * FROM access_tokens ORDER BY expires_at DESC LIMIT 1")
-            .ok()?;
-        let mut results = stmt
-            .query_map([], |row| {
-                Ok(AccessToken {
-                    id: row.get(0)?,
-                    access_token: row.get(1)?,
-                    refresh_token: row.get(2)?,
-                    expires_at: row.get(3)?,
-                })
+    pub fn get_latest(conn: &Connection) -> rusqlite::Result<Option<AccessToken>> {
+        let mut stmt =
+            conn.prepare("SELECT * FROM access_tokens ORDER BY expires_at DESC LIMIT 1")?;
+        stmt.query_row([], |row| {
+            Ok(AccessToken {
+                id: row.get(0)?,
+                access_token: row.get(1)?,
+                refresh_token: row.get(2)?,
+                expires_at: row.get(3)?,
             })
-            .ok()?;
-        results.next().and_then(|f| f.ok())
+        })
+        .optional()
     }
 }

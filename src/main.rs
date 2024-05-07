@@ -6,17 +6,23 @@ use oauth::OAuthAccessToken;
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::Value;
+use anyhow::{Result, anyhow};
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
     let conn = db::get_connection().unwrap();
-    db::setup_tables(&conn).unwrap();
+    db::setup_tables(&conn)?;
 
-    let access_token = oauth::run(&conn).await;
-    let response = get_messages(&access_token).await;
-    let message = response.messages.get(3).unwrap();
-    let response = get_message(&access_token, &message.id).await;
-    println!("{:?}", response);
+    let access_token = oauth::get_access_token(&conn).await?;
+    let response = get_messages(&access_token).await?;
+    match response.messages.get(3) {
+        Some(message) => {
+            let response = get_message(&access_token, &message.id).await?;
+            println!("{:?}", response);
+            Ok(())
+        },
+        None => { Err(anyhow!("Message not found at this index")) }
+    }
 }
 
 #[derive(Deserialize, Debug)]
@@ -33,7 +39,7 @@ struct GetMessagesResponse {
     messages: Vec<MessageSnippet>,
 }
 
-async fn get_messages(access_token: &OAuthAccessToken) -> GetMessagesResponse {
+async fn get_messages(access_token: &OAuthAccessToken) -> reqwest::Result<GetMessagesResponse> {
     let client = Client::new();
     client
         .get("https://gmail.googleapis.com/gmail/v1/users/me/messages")
@@ -43,10 +49,9 @@ async fn get_messages(access_token: &OAuthAccessToken) -> GetMessagesResponse {
         .unwrap()
         .json()
         .await
-        .unwrap()
 }
 
-async fn get_message(access_token: &OAuthAccessToken, message_id: &MessageId) -> Value {
+async fn get_message(access_token: &OAuthAccessToken, message_id: &MessageId) -> reqwest::Result<Value> {
     let client = Client::new();
     let url = format!(
         "https://gmail.googleapis.com/gmail/v1/users/me/messages/{}",
@@ -60,5 +65,4 @@ async fn get_message(access_token: &OAuthAccessToken, message_id: &MessageId) ->
         .unwrap()
         .json()
         .await
-        .unwrap()
 }
