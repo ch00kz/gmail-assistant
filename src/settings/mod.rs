@@ -1,4 +1,5 @@
 use crate::oauth::{OAuthClientId, OAuthClientSecret};
+use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::{fs::File, io::Read};
 use url::Url;
@@ -8,13 +9,14 @@ pub struct Settings {
     pub google_oauth: GoogleOAuthSettings,
 }
 
-pub fn get_settings() -> Settings {
-    let mut settings_file = File::open("src/settings.toml").expect("Unable to open settings.toml");
+pub fn get_settings() -> Result<Settings> {
+    let mut settings_file =
+        File::open("src/settings.toml").context("Unable to open settings.toml")?;
     let mut toml_str = String::new();
     settings_file
         .read_to_string(&mut toml_str)
-        .expect("Unable to read settings.toml");
-    toml::from_str::<Settings>(&toml_str).expect("Unable to parse settings.toml")
+        .context("Unable to read settings.toml")?;
+    Ok(toml::from_str::<Settings>(&toml_str)?)
 }
 
 #[derive(Deserialize)]

@@ -2,15 +2,15 @@ mod db;
 mod oauth;
 mod settings;
 
+use anyhow::{anyhow, Result};
 use oauth::OAuthAccessToken;
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::Value;
-use anyhow::{Result, anyhow};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let conn = db::get_connection().unwrap();
+    let conn = db::get_connection()?;
     db::setup_tables(&conn)?;
 
     let access_token = oauth::get_access_token(&conn).await?;
@@ -20,8 +20,8 @@ async fn main() -> Result<()> {
             let response = get_message(&access_token, &message.id).await?;
             println!("{:?}", response);
             Ok(())
-        },
-        None => { Err(anyhow!("Message not found at this index")) }
+        }
+        None => Err(anyhow!("Message not found at this index")),
     }
 }
 
@@ -45,13 +45,15 @@ async fn get_messages(access_token: &OAuthAccessToken) -> reqwest::Result<GetMes
         .get("https://gmail.googleapis.com/gmail/v1/users/me/messages")
         .bearer_auth(access_token)
         .send()
-        .await
-        .unwrap()
+        .await?
         .json()
         .await
 }
 
-async fn get_message(access_token: &OAuthAccessToken, message_id: &MessageId) -> reqwest::Result<Value> {
+async fn get_message(
+    access_token: &OAuthAccessToken,
+    message_id: &MessageId,
+) -> reqwest::Result<Value> {
     let client = Client::new();
     let url = format!(
         "https://gmail.googleapis.com/gmail/v1/users/me/messages/{}",
@@ -61,8 +63,7 @@ async fn get_message(access_token: &OAuthAccessToken, message_id: &MessageId) ->
         .get(url)
         .bearer_auth(access_token)
         .send()
-        .await
-        .unwrap()
+        .await?
         .json()
         .await
 }
