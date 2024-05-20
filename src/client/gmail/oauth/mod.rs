@@ -1,7 +1,8 @@
+use crate::config;
 use crate::db;
-use crate::settings::get_settings;
 use anyhow::{anyhow, Result};
 use chrono::Utc;
+use db::models::access_tokens::AccessToken;
 use sqlx::SqlitePool;
 use url::Url;
 
@@ -9,14 +10,14 @@ pub mod types;
 pub use self::types::*;
 
 pub async fn get_access_token(pool: &SqlitePool) -> Result<OAuthAccessToken> {
-    let opt_record = db::access_token::AccessToken::get_latest(pool).await?;
+    let opt_record: Option<AccessToken> = AccessToken::get_latest(pool).await?;
     match opt_record {
         Some(record) => {
             let now = Utc::now();
             if record.expires_at > now {
                 Ok(record.access_token)
             } else {
-                let res = crate::oauth::refresh_access_token(&record.refresh_token).await?;
+                let res = refresh_access_token(&record.refresh_token).await?;
                 record
                     .update_access_token(pool, &res.access_token, res.expires_in)
                     .await?;
@@ -25,13 +26,8 @@ pub async fn get_access_token(pool: &SqlitePool) -> Result<OAuthAccessToken> {
         }
         None => {
             let res = manual_user_flow().await?;
-            db::access_token::AccessToken::insert(
-                pool,
-                &res.access_token,
-                &res.refresh_token,
-                &res.expires_in,
-            )
-            .await?;
+            AccessToken::insert(pool, &res.access_token, &res.refresh_token, &res.expires_in)
+                .await?;
             Ok(res.access_token)
         }
     }
@@ -51,11 +47,11 @@ pub async fn manual_user_flow() -> Result<GetAccessTokenResponse> {
 }
 
 fn build_oauth_url() -> Result<Url> {
-    let settings = get_settings()?;
+    let config = config::get_config()?;
     let params = OAuthUrlParams {
         response_type: "code".to_string(),
-        client_id: settings.google_oauth.client_id,
-        redirect_uri: settings.google_oauth.redirect_url,
+        client_id: config.google_oauth.client_id,
+        redirect_uri: config.google_oauth.redirect_url,
         scope: "https://www.googleapis.com/auth/gmail.readonly".to_string(),
         access_type: "offline".to_string(),
         include_granted_scopes: "true".to_string(),
@@ -75,13 +71,13 @@ fn parse_redirect_url_params(redirect_url: Url) -> Result<RedirectUrlParams> {
 }
 
 pub async fn request_access_token(code: OAuthRedirectCode) -> Result<GetAccessTokenResponse> {
-    let settings = get_settings()?;
+    let config = config::get_config()?;
     let body = GetAccessTokenParams {
         code,
         grant_type: "authorization_code".to_string(),
-        client_id: settings.google_oauth.client_id,
-        client_secret: settings.google_oauth.client_secret,
-        redirect_uri: settings.google_oauth.redirect_url,
+        client_id: config.google_oauth.client_id,
+        client_secret: config.google_oauth.client_secret,
+        redirect_uri: config.google_oauth.redirect_url,
     };
     let client = reqwest::Client::new();
     Ok(client
@@ -96,12 +92,12 @@ pub async fn request_access_token(code: OAuthRedirectCode) -> Result<GetAccessTo
 pub async fn refresh_access_token(
     refresh_token: &OAuthRefreshToken,
 ) -> Result<RefreshTokenResponse> {
-    let settings = get_settings()?;
+    let config = config::get_config()?;
     let body = RefreshTokenParams {
         refresh_token: refresh_token.clone(),
         grant_type: "refresh_token".to_string(),
-        client_id: settings.google_oauth.client_id,
-        client_secret: settings.google_oauth.client_secret,
+        client_id: config.google_oauth.client_id,
+        client_secret: config.google_oauth.client_secret,
     };
     let client = reqwest::Client::new();
     Ok(client

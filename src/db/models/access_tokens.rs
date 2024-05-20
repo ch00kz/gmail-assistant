@@ -1,7 +1,7 @@
 use chrono::{DateTime, Duration, Utc};
 use sqlx::SqlitePool;
 
-use crate::oauth::{OAuthAccessToken, OAuthRefreshToken};
+use crate::client::gmail::oauth::{OAuthAccessToken, OAuthRefreshToken};
 
 fn to_expires_at(expires_in: u32) -> DateTime<Utc> {
     Utc::now() + Duration::milliseconds(expires_in as i64)
