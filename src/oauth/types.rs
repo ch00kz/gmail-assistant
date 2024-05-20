@@ -1,6 +1,5 @@
 use core::fmt;
 
-use rusqlite::{types::FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -31,7 +30,8 @@ pub struct RedirectUrlParams {
     pub code: OAuthRedirectCode,
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone, sqlx::Type)]
+#[sqlx(transparent)]
 pub struct OAuthAccessToken(pub String);
 
 impl fmt::Display for OAuthAccessToken {
@@ -40,38 +40,13 @@ impl fmt::Display for OAuthAccessToken {
     }
 }
 
-impl ToSql for OAuthAccessToken {
-    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
-        self.0.to_sql()
-    }
-}
-
-impl FromSql for OAuthAccessToken {
-    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
-        let token = value.as_str()?;
-        Ok(OAuthAccessToken(token.to_string()))
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, sqlx::Type)]
+#[sqlx(transparent)]
 pub struct OAuthRefreshToken(pub String);
 
 impl fmt::Display for OAuthRefreshToken {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.0)
-    }
-}
-
-impl ToSql for OAuthRefreshToken {
-    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
-        self.0.to_sql()
-    }
-}
-
-impl FromSql for OAuthRefreshToken {
-    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
-        let token = value.as_str()?;
-        Ok(OAuthRefreshToken(token.to_string()))
     }
 }
 

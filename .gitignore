@@ -1,3 +1,5 @@
 /target
 src/settings.toml
 *.db
+*.db-wal
+*.db-shm

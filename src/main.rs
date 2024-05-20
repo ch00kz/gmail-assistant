@@ -7,13 +7,13 @@ use oauth::OAuthAccessToken;
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::Value;
+use sqlx::SqlitePool;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let conn = db::get_connection()?;
-    db::setup_tables(&conn)?;
+    let pool = SqlitePool::connect("sqlite://gmail-assistant.db").await?;
 
-    let access_token = oauth::get_access_token(&conn).await?;
+    let access_token = oauth::get_access_token(&pool).await?;
     let response = get_messages(&access_token).await?;
     match response.messages.get(3) {
         Some(message) => {

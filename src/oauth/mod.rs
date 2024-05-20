@@ -2,14 +2,14 @@ use crate::db;
 use crate::settings::get_settings;
 use anyhow::{anyhow, Result};
 use chrono::Utc;
-use rusqlite::Connection;
+use sqlx::SqlitePool;
 use url::Url;
 
 pub mod types;
 pub use self::types::*;
 
-pub async fn get_access_token(conn: &Connection) -> Result<OAuthAccessToken> {
-    let opt_record = db::access_token::AccessToken::get_latest(conn)?;
+pub async fn get_access_token(pool: &SqlitePool) -> Result<OAuthAccessToken> {
+    let opt_record = db::access_token::AccessToken::get_latest(pool).await?;
     match opt_record {
         Some(record) => {
             let now = Utc::now();
@@ -17,18 +17,21 @@ pub async fn get_access_token(conn: &Connection) -> Result<OAuthAccessToken> {
                 Ok(record.access_token)
             } else {
                 let res = crate::oauth::refresh_access_token(&record.refresh_token).await?;
-                record.update_access_token(conn, &res.access_token, res.expires_in)?;
+                record
+                    .update_access_token(pool, &res.access_token, res.expires_in)
+                    .await?;
                 Ok(res.access_token)
             }
         }
         None => {
             let res = manual_user_flow().await?;
             db::access_token::AccessToken::insert(
-                conn,
+                pool,
                 &res.access_token,
                 &res.refresh_token,
-                res.expires_in,
-            )?;
+                &res.expires_in,
+            )
+            .await?;
             Ok(res.access_token)
         }
     }
